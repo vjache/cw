@@ -11,7 +11,6 @@ setup(
     url='https://github.com/vjache/cw',
     packages=find_packages(),
     install_requires=[
-        'pygame',
         'pygame_gui'
     ],
     classifiers=[
