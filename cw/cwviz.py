@@ -212,40 +212,41 @@ class CellWorldVisualizer:
                 vsync=1, flags=pygame.SCALED)
         running = True
         while running:
-            time_delta = self.clock.tick(60) / 1000.0
-            mouse_pos = pygame.mouse.get_pos()
+            with self.world.lock:
+                time_delta = self.clock.tick(60) / 1000.0
+                mouse_pos = pygame.mouse.get_pos()
 
-            for event in pygame.event.get():
-                if event.type == QUIT:
-                    running = False
+                for event in pygame.event.get():
+                    if event.type == QUIT:
+                        running = False
 
-                if event.type == MOUSEBUTTONDOWN:
-                    # Only select agents in grid area
-                    if mouse_pos[0] < self.world.width * self.cell_size and \
-                            mouse_pos[1] < self.world.height * self.cell_size:
-                        x = mouse_pos[0] // self.cell_size
-                        y = self.world.height - 1 - (mouse_pos[1] // self.cell_size)
-                        cell = self.world.grid[x][y]
-                        if cell.agents:
-                            self.selected_agent = cell.agents[0]
+                    if event.type == MOUSEBUTTONDOWN:
+                        # Only select agents in grid area
+                        if mouse_pos[0] < self.world.width * self.cell_size and \
+                                mouse_pos[1] < self.world.height * self.cell_size:
+                            x = mouse_pos[0] // self.cell_size
+                            y = self.world.height - 1 - (mouse_pos[1] // self.cell_size)
+                            cell = self.world.grid[x][y]
+                            if cell.agents:
+                                self.selected_agent = cell.agents[0]
 
-                if event.type == pygame_gui.UI_BUTTON_PRESSED:
-                    if event.ui_element == self.submit_button:
-                        goal = self.input_box.get_text()
-                        if goal:
-                            self._add_log(f"User: {goal}")
-                            self.input_box.set_text("")
+                    if event.type == pygame_gui.UI_BUTTON_PRESSED:
+                        if event.ui_element == self.submit_button:
+                            goal = self.input_box.get_text()
+                            if goal:
+                                self._add_log(f"User: {goal}")
+                                self.input_box.set_text("")
 
-                self.manager.process_events(event)
+                    self.manager.process_events(event)
 
-            self.screen.fill(self.colors['background'])
-            self._draw_grid()
-            self._draw_hud()
-            self._draw_cell_info(mouse_pos)
+                self.screen.fill(self.colors['background'])
+                self._draw_grid()
+                self._draw_hud()
+                self._draw_cell_info(mouse_pos)
 
-            self.manager.update(time_delta)
-            self.manager.draw_ui(self.screen)
-            pygame.display.flip()
+                self.manager.update(time_delta)
+                self.manager.draw_ui(self.screen)
+                pygame.display.flip()
 
     def _add_log(self, message: str):
         current_text = self.log_window.html_text
