@@ -1,4 +1,4 @@
-from .cw import CellWorld, Cell, Agent, Item, ItemType, Direction
+from .cw import CellWorld, Cell, Agent, Item, ItemType, Direction, Status, CW_API_LOCK
 from .cwviz import CellWorldVisualizer
 
 __version__ = "0.0.1"

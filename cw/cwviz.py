@@ -4,7 +4,8 @@ import pygame
 import pygame_gui
 from pygame.locals import *
 
-from cw import CellWorld, Agent, Item, ItemType
+from cw import CellWorld, Agent, Item, ItemType, Status
+import cw
 
 
 class CellWorldVisualizer:
@@ -145,6 +146,8 @@ class CellWorldVisualizer:
                 f"Health: {self.selected_agent.health}",
                 f"Energy: {self.selected_agent.energy}",
                 f"ATP: {self.selected_agent.atp}",
+                f"Status: {self.selected_agent.status}",
+                f"Goal: {self.selected_agent.goal}",
                 "<b>Inventory:</b>"
             ]
             stats_text += [f"- {item.name} ({item.type.value})" for item in self.selected_agent.inventory]
@@ -212,41 +215,55 @@ class CellWorldVisualizer:
                 vsync=1, flags=pygame.SCALED)
         running = True
         while running:
-            with self.world.lock:
-                time_delta = self.clock.tick(60) / 1000.0
-                mouse_pos = pygame.mouse.get_pos()
+            time_delta = self.clock.tick(60) / 1000.0
+            mouse_pos = pygame.mouse.get_pos()
 
-                for event in pygame.event.get():
-                    if event.type == QUIT:
-                        running = False
+            for event in pygame.event.get():
+                if event.type == QUIT:
+                    running = False
 
-                    if event.type == MOUSEBUTTONDOWN:
-                        # Only select agents in grid area
-                        if mouse_pos[0] < self.world.width * self.cell_size and \
-                                mouse_pos[1] < self.world.height * self.cell_size:
-                            x = mouse_pos[0] // self.cell_size
-                            y = self.world.height - 1 - (mouse_pos[1] // self.cell_size)
-                            cell = self.world.grid[x][y]
-                            if cell.agents:
-                                self.selected_agent = cell.agents[0]
+                if event.type == MOUSEBUTTONDOWN:
+                    # Only select agents in grid area
+                    if mouse_pos[0] < self.world.width * self.cell_size and \
+                            mouse_pos[1] < self.world.height * self.cell_size:
+                        x = mouse_pos[0] // self.cell_size
+                        y = self.world.height - 1 - (mouse_pos[1] // self.cell_size)
+                        cell = self.world.grid[x][y]
+                        if cell.agents:
+                            self.selected_agent = cell.agents[0]
 
-                    if event.type == pygame_gui.UI_BUTTON_PRESSED:
-                        if event.ui_element == self.submit_button:
-                            goal = self.input_box.get_text()
-                            if goal:
-                                self._add_log(f"User: {goal}")
-                                self.input_box.set_text("")
+                if event.type == pygame_gui.UI_BUTTON_PRESSED:
+                    if event.ui_element == self.submit_button:
+                        goal = self.input_box.get_text()
+                        if goal:
+                            if self.selected_agent:
+                                if self.selected_agent.status == Status.EXEC_GOAL:
+                                    self._add_log(f"CWV: Selected agent {self.selected_agent.name} is busy.")
+                                else:
+                                    self._add_log(f"User to {self.selected_agent.name}: {goal}")
+                                    self.selected_agent.set_goal(goal)
+                                    self.input_box.set_text("")
+                            else:
+                                self._add_log(f"CWV: No agent selected. Please select an agent.")
 
-                    self.manager.process_events(event)
+                self.manager.process_events(event)
 
-                self.screen.fill(self.colors['background'])
+            for agent_name, agent in self.world.agents.items():
+                new_messages = agent.take_goal_log()
+                if new_messages:
+                    for message in new_messages:
+                        self._add_log(f"{agent_name}: {message}")
+
+            self.screen.fill(self.colors['background'])
+
+            with cw.CW_API_LOCK:
                 self._draw_grid()
                 self._draw_hud()
                 self._draw_cell_info(mouse_pos)
 
-                self.manager.update(time_delta)
-                self.manager.draw_ui(self.screen)
-                pygame.display.flip()
+            self.manager.update(time_delta)
+            self.manager.draw_ui(self.screen)
+            pygame.display.flip()
 
     def _add_log(self, message: str):
         current_text = self.log_window.html_text
@@ -271,6 +288,26 @@ if __name__ == "__main__":
     world.add_agent(researcher, (0, 0))
     world.add_agent(assistant, (7, 7))
 
+    world.new_turn(1000)
+
+    def run_agent(agent):
+        from cw import Direction
+        from time import sleep
+        agent.append_goal_log('Start goal execution.')
+        for _ in range(10):
+            world.move_agent(agent, Direction.EAST)
+            sleep(0.1)
+        agent.append_goal_log("Task completed.")
+        agent.set_idle()
+
+
+    def start_agent_goal(agent):
+        from threading import Thread
+        thread = Thread(target=run_agent, args=[agent])
+        thread.start()
+
+    researcher.on_goal_set = start_agent_goal
+    assistant.on_goal_set = start_agent_goal
     # Initialize and run visualizer
     vis = CellWorldVisualizer(world, cell_size=30, chat_height=200)
     vis.run()
