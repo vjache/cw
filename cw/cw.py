@@ -3,6 +3,7 @@ from threading import RLock
 from typing import Dict, List, Tuple, Any
 import logging
 from functools import wraps
+import random
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -26,7 +27,10 @@ class Direction(Enum):
     SOUTH = (0, -1)
     EAST = (1, 0)
     WEST = (-1, 0)
-
+    NORTHEAST = (1, 1)
+    NORTHWEST = (-1, 1)
+    SOUTHEAST = (1, -1)
+    SOUTHWEST = (-1, -1)
 
 class ItemType(Enum):
     FOOD = "food"
@@ -115,6 +119,9 @@ class Agent:
     def __repr__(self):
         return f"Agent({self.name}, ♥{self.health}, ⚡{self.energy}, ATP:{self.atp}, Status: {self.status})"
 
+def _ensure_ortho_direction(direction: Direction):
+    if direction not in [Direction.EAST, Direction.NORTH, Direction.SOUTH, Direction.WEST]:
+        raise ValueError(f'Not ortho-direction: {direction}')
 
 class CellWorld:
     def __init__(self, width: int, height: int):
@@ -147,8 +154,20 @@ class CellWorld:
         return True
 
     @_api
+    def remove_agent(self, agent):
+        if agent.name not in self.agents:
+            return False
+        x, y = agent.position
+        cell = self.grid[x][y]
+        cell.agents.remove(agent)
+        del self.agents[agent.name]
+        return True
+
+    @_api
     def move_agent(self, agent: Agent, direction: Direction) -> bool:
         """Attempt to move agent in specified direction"""
+        _ensure_ortho_direction(direction)
+
         if not self._validate_agent(agent) or not agent.can_act():
             return False
 
@@ -173,11 +192,16 @@ class CellWorld:
         self.grid[x][y].agents.remove(agent)
         new_cell.agents.append(agent)
         agent.position = (new_x, new_y)
+        # Handle target death
+        if agent.health <= 0:
+            self._handle_agent_death(agent)
         return True
 
     @_api
     def attack(self, attacker: Agent, direction: Direction) -> bool:
         """Perform attack in specified direction"""
+        _ensure_ortho_direction(direction)
+
         if not self._validate_agent(attacker) or not attacker.can_act():
             return False
 
@@ -198,7 +222,7 @@ class CellWorld:
         damage = base_damage + (weapon.value if weapon else 0)
 
         # Apply damage
-        target = target_cell.agents[0]
+        target = random.choice(target_cell.agents)
         target.health -= damage
 
         # Handle target death
@@ -210,10 +234,11 @@ class CellWorld:
 
     def _handle_agent_death(self, agent: Agent):
         """Handle agent death and inventory drop"""
-        cell = self.grid[agent.position[0]][agent.position[1]]
+        x, y = agent.position
+        cell = self.grid[x][y]
         cell.items.extend(agent.inventory)
         agent.inventory.clear()
-        del self.agents[agent.name]
+        self.remove_agent(agent)
 
     @_api
     def pick_item(self, agent: Agent, item_index: int) -> bool:
@@ -269,6 +294,22 @@ class CellWorld:
             result[direction] = cell_info
 
         return result
+
+    @_api
+    def inspect_agent(self, agent):
+        """Return detailed information about an agent"""
+        if agent.name not in self.agents:
+            return {"error": "Agent does not exist"}
+
+        target_agent = self.agents[agent.name]
+        return {
+            "name": target_agent.name,
+            "position": target_agent.position,
+            "health": target_agent.health,
+            "energy": target_agent.energy,
+            "inventory": [item.name for item in target_agent.inventory],
+            "atp": target_agent.atp
+        }
 
     # World management methods
 

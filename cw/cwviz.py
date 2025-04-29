@@ -167,9 +167,23 @@ class CellWorldVisualizer:
 
         if 0 <= x < self.world.width and 0 <= y < self.world.height:
             cell = self.world.grid[x][y]
-            info = [f"Cell: {x},{y}"]
 
-            # ... existing info collection code ...
+            terrain = None
+            if cell.obstacle:
+                terrain = 'obstacle'
+            elif cell.pit:
+                terrain = 'pit'
+            elif cell.trap:
+                terrain = 'trap'
+
+            terrain = f' [{terrain}]' if terrain else ''
+            info = [f"Cell: {x},{y}{terrain}"]
+
+            for item in cell.items:
+                info.append(f'item: {item.name}')
+
+            for agent in cell.agents:
+                info.append(f'agent: {agent.name}')
 
             if info:
                 font = pygame.font.Font(None, 18)
